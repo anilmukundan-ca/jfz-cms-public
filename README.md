@@ -33,6 +33,14 @@ A production-grade, cloud-native contract lifecycle management system built for 
 - Contracts expiring within 60/30 days highlighted with amber alerts
 - Drill-down modals for property history and client contract history
 
+### Interactive Facility Map
+- Full satellite/plan image of the JFZ facility displayed as an interactive map
+- Colour-coded property pins: green (leased), amber (expiring soon), red (expired), grey (available)
+- Hover tooltip on each pin showing property name, client name, status, and days remaining
+- Click any pin to go directly to the contract detail page
+- Admin-only pin placement mode — drag and drop pins onto the map image
+- Real-time pin saving — coordinates stored in PostgreSQL
+
 ### Document Repository
 - Cloud-hosted document storage (Google Cloud Storage)
 - Auto-cleanup of draft/final Word documents when signed contract is uploaded
@@ -47,7 +55,7 @@ A production-grade, cloud-native contract lifecycle management system built for 
 
 ### Mobile-First Design
 - Responsive hamburger menu on screens under 900px
-- All upload inputs support camera, gallery, and file picker on Android and iOS
+- All upload inputs support camera, gallery, and file picker equally on Android and iOS
 - Progressive Web App (PWA) ready — installable from Chrome to home screen
 
 ### Security
@@ -100,10 +108,10 @@ User (Browser/Mobile)
   Flask application — containerised
         │
         ├──► Cloud SQL (PostgreSQL 15)
-        │    Contracts, clients, properties, users
+        │    Contracts, clients, properties, users, map coordinates
         │
         ├──► Cloud Storage (jfz-cms-repository)
-        │    Signed contracts, Word documents, templates, licences
+        │    Signed contracts, Word documents, templates, licences, facility map
         │
         └──► Secret Manager
              DATABASE_URL, SECRET_KEY, GCS_BUCKET
@@ -127,11 +135,13 @@ jfz-cms/
 │   │   ├── clients.py       # Client management
 │   │   ├── contracts.py     # Contract lifecycle
 │   │   ├── dashboard.py     # Home dashboard with KPIs
+│   │   ├── facilitymap.py   # Interactive facility map with pin placement
 │   │   ├── locks.py         # Write-lock API
+│   │   ├── migration.py     # Data migration utilities
 │   │   ├── occupancy.py     # Occupancy report with area/revenue stats
 │   │   ├── properties.py    # Property management
-│   │   ├── register.py      # Contract register + Excel export
-│   │   └── repository.py    # Document repository
+│   │   ├── repository.py    # Document repository + contract register
+│   │   └── help.py          # Help and user manual
 │   ├── services/
 │   │   ├── auth_helpers.py      # Login decorators
 │   │   ├── contract_engine.py   # Word document generation
@@ -147,6 +157,7 @@ jfz-cms/
 │       ├── clients/
 │       ├── contracts/
 │       ├── dashboard/
+│       ├── facilitymap/     # Interactive facility map
 │       ├── occupancy/
 │       ├── properties/
 │       ├── register/
@@ -163,7 +174,7 @@ jfz-cms/
 
 | Role | Access |
 |---|---|
-| Admin | Full access — users, settings, housekeeping, all contract operations |
+| Admin | Full access — users, settings, housekeeping, pin placement, all contract operations |
 | Approver | Can approve/reject contracts submitted for approval |
 | Standard | Create and manage contracts, upload documents |
 | View | Read-only access to all data |
@@ -211,6 +222,8 @@ Example: JFZ-2026-0042-DWH-W12-R00
 
 **Atomic serial numbers** — contract serial numbers assigned using `LOCK TABLE serial_counter IN EXCLUSIVE MODE` to prevent duplicate numbers under concurrent load.
 
+**Interactive facility map** — property pins stored as percentage coordinates (x_pct, y_pct) relative to the map image dimensions, making the map fully responsive across all screen sizes.
+
 ---
 
 ## Deployment
@@ -218,6 +231,14 @@ Example: JFZ-2026-0042-DWH-W12-R00
 ### Build and deploy a new version
 
 ```bash
+# Edit source files
+cd ~/jfz-cms-source
+
+# Commit to GitHub
+git add .
+git commit -m "describe the change"
+git push origin main
+
 # Build Docker image from source
 gcloud builds submit ~/jfz-cms-source \
   --tag europe-west1-docker.pkg.dev/jfz-cms-prod/jfz-cms-images/jfzcms:vX.XX \
@@ -267,21 +288,29 @@ jfz-cms-repository/
 ├── finals/          # Final Word documents (auto-deleted on signed upload)
 ├── signed_pdfs/     # Signed contract documents — NEVER deleted
 ├── templates/       # Contract Word templates (5 files, one per property type)
-└── licences/        # Client DPFZA licence documents
+├── licences/        # Client DPFZA licence documents
+└── static/          # Static assets (facility map image)
 ```
-
-### Secrets (GCP Secret Manager)
-
-| Secret | Purpose |
-|---|---|
-| CMS_SECRET_KEY | Flask session signing key |
-| CMS_DATABASE_URL | PostgreSQL connection string (Cloud SQL) |
-| CMS_GCS_BUCKET | GCS bucket name |
 
 ---
 
-## Database Backups
+## Database
 
+### Key Tables
+
+| Table | Purpose |
+|---|---|
+| contracts | Contract lifecycle and status |
+| clients | Tenant/client details |
+| properties | Property portfolio |
+| property_map_coords | Facility map pin coordinates (x_pct, y_pct) |
+| contract_documents | Uploaded documents (signed contracts, Word files) |
+| contract_templates | Word templates per property type |
+| serial_counter | Atomic contract serial number counter |
+| users | CMS application users and roles |
+| activity_log | Full audit trail of all actions |
+
+### Backups
 Cloud SQL automatic backups run daily at 02:00 UTC with 7-day retention. Object versioning on GCS provides 30-day recovery for all stored documents.
 
 ---
@@ -307,7 +336,7 @@ The system was originally a Flask + SQLite application running on a Windows 11 L
 - SQLite → PostgreSQL 15 (Cloud SQL)
 - Local file storage → Google Cloud Storage
 - LAN-only access → Cloud Run + IAP (accessible globally with authorisation)
-- Manual start → systemd-equivalent via Cloud Run auto-start
+- Manual start → Cloud Run auto-start
 - Local backups → Cloud SQL automated backups + GCS object versioning
 
 The Windows system remains stopped as a fallback (D:\CMS_Data\Start_CMS.bat) for a minimum of 90 days post go-live.
@@ -332,17 +361,18 @@ The Windows system remains stopped as a fallback (D:\CMS_Data\Start_CMS.bat) for
 | v2.16 | Mobile upload — equal camera/gallery/files options |
 | v2.17 | All patches consolidated; GitHub repository created |
 | v2.18 | First clean build directly from GitHub source |
+| v2.19 – v2.23 | Interactive facility map with property pins |
 
 ---
 
-## Development Notes
+## Repositories
 
-This application was developed iteratively alongside live deployment on GCP. All PostgreSQL compatibility fixes (replacing SQLite-specific syntax such as `BEGIN EXCLUSIVE`, `julianday()`, `last_insert_rowid()`, and integer-indexed row access) were applied as the system was put into production use.
-
-The codebase is now source-controlled in this repository. All future changes should follow the edit → commit → build → deploy workflow described above.
+| Repository | URL | Visibility |
+|---|---|---|
+| Source code | https://github.com/anilmukundan-ca/jfz-cms | Private |
+| Public showcase | https://github.com/anilmukundan-ca/jfz-cms-public | Public |
 
 ---
 
 *Jaban's Free Zone FZE — Djibouti, Republic of Djibouti*
-*Anil Mukundan (CFO)*
-*Repository: https://github.com/anilmukundan-ca/jfz-cms*
+*System Administrator: Anil Mukundan (CFO)*
