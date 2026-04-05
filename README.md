@@ -344,5 +344,5 @@ The codebase is now source-controlled in this repository. All future changes sho
 ---
 
 *Jaban's Free Zone FZE — Djibouti, Republic of Djibouti*
-*System Administrator: Anil Mukundan (CFO)*
+*Anil Mukundan (CFO)*
 *Repository: https://github.com/anilmukundan-ca/jfz-cms*
