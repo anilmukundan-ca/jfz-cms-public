@@ -1,4 +1,4 @@
-# JFZ Contract Management System (JFZ-CMS)
+9# JFZ Contract Management System (JFZ-CMS)
 
 **Jaban's Free Zone FZE — Djibouti, Republic of Djibouti**
 
@@ -374,5 +374,5 @@ The Windows system remains stopped as a fallback (D:\CMS_Data\Start_CMS.bat) for
 
 ---
 
-*Jaban's Free Zone FZE — Djibouti, Republic of Djibouti*
+*Jaban's Free Zone FZE — Djibouti*
 *System Administrator: Anil Mukundan (CFO)*
